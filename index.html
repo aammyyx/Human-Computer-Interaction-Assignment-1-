@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Procreate Canvas - Fitts' Law Experiment</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body, html {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #121316;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      touch-action: none;
+    }
+
+    #app-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(#1e2024 15%, transparent 16%) 0 0 / 16px 16px, #121316;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* 頂部工具列 */
+    #top-toolbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 56px;
+      background: #18191d;
+      border-bottom: 1px solid #282a30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 100;
+      color: #92959e;
+      overflow: visible;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .toolbar-group-right {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .gallery-text {
+      font-size: 15px;
+      font-weight: 500;
+      color: #b0b4be;
+      margin-right: 6px;
+      cursor: default;
+    }
+
+    .tool-icon {
+      width: 22px;
+      height: 22px;
+      min-width: 22px;
+      fill: none;
+      stroke: #8d919d;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .tool-icon.active {
+      stroke: #2a82fe;
+    }
+
+    .color-disc {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #32353e;
+      flex-shrink: 0;
+    }
+
+    /* Layers 容器：維持 40px 佔位格，Target 由中心向外延伸不推擠其他按鈕 */
+    #layers-target-wrapper {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      z-index: 110;
+    }
+
+    /* 實體 Target Hitbox (無文字) */
+    #layers-hitbox {
+      position: absolute;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      pointer-events: auto;
+      background: #202227;
+      border: 1.5px solid #373b47;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.12s ease, background 0.12s ease;
+    }
+
+    /* Target 尺寸：40 / 60 / 80 px */
+    .target-size-40 {
+      width: 40px !important;
+      height: 40px !important;
+    }
+    .target-size-40 #layers-icon-svg {
+      width: 20px !important;
+      height: 20px !important;
+    }
+
+    .target-size-60 {
+      width: 60px !important;
+      height: 60px !important;
+      background: #23252c !important;
+      border: 1.8px solid #414654 !important;
+    }
+    .target-size-60 #layers-icon-svg {
+      width: 29px !important;
+      height: 29px !important;
+    }
+
+    .target-size-80 {
+      width: 80px !important;
+      height: 80px !important;
+      background: #252830 !important;
+      border: 2px solid #4a5061 !important;
+    }
+    .target-size-80 #layers-icon-svg {
+      width: 38px !important;
+      height: 38px !important;
+    }
+
+    /* 當前目標高亮狀態 */
+    .target-active {
+      border-color: #2a82fe !important;
+      background: rgba(42, 130, 254, 0.25) !important;
+      box-shadow: 0 0 14px rgba(42, 130, 254, 0.4) !important;
+    }
+    .target-active #layers-icon-svg {
+      stroke: #2a82fe !important;
+    }
+
+    /* 左側側邊欄 */
+    #left-dock {
+      position: absolute;
+      left: 12px;
+      top: 140px;
+      width: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      z-index: 90;
+      pointer-events: none;
+    }
+
+    .slider-track {
+      width: 32px;
+      height: 110px;
+      background: #24262b;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+    }
+
+    .slider-thumb {
+      width: 26px;
+      height: 14px;
+      background: #464a54;
+      border-radius: 6px;
+    }
+
+    .dock-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: #202227;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #636875;
+      font-size: 13px;
+    }
+
+    /* 中央 Canvas 畫布 */
+    #canvas-container {
+      position: absolute;
+      top: 56px;
+      left: 0;
+      width: 100vw;
+      height: calc(100vh - 56px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    #drawing-paper {
+      width: 92vw;
+      height: 88vh;
+      background-color: #ffffff;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    /* Start Point (固定 64px 直徑) */
+    #start-point {
+      position: absolute;
+      width: 64px !important;
+      height: 64px !important;
+      border-radius: 50%;
+      background: radial-gradient(circle, #2a82fe 0%, #165abf 70%, #0d3878 100%);
+      border: 3px solid #ffffff;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 99;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+
+    #start-point.target-active {
+      box-shadow: 0 0 18px rgba(42, 130, 254, 0.7);
+      border-color: #ffffff;
+    }
+
+    #start-point.target-inactive {
+      background: radial-gradient(circle, #4a4f5b 0%, #2a2d36 70%, #1c1d22 100%);
+      border-color: #7b8190;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    }
+
+    #start-point::after {
+      content: '';
+      width: 12px;
+      height: 12px;
+      background: #ffffff;
+      border-radius: 50%;
+    }
+
+    /* HUD 狀態欄 */
+    #experiment-hud {
+      position: absolute;
+      top: 68px;
+      right: 20px;
+      background: rgba(24, 25, 29, 0.85);
+      border: 1px solid #2e323b;
+      padding: 7px 16px;
+      border-radius: 20px;
+      color: #9da2af;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      z-index: 95;
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
+
+    /* 完成實驗 Modal */
+    .modal-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(10, 11, 13, 0.84);
+      backdrop-filter: blur(12px);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-box {
+      background: #1c1d22;
+      border: 1px solid #2f323a;
+      border-radius: 14px;
+      padding: 32px 28px;
+      width: 360px;
+      max-width: 90vw;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      text-align: center;
+      color: #e2e4ea;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #ffffff;
+    }
+
+    .modal-desc {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #8f94a0;
+      margin-bottom: 24px;
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 12px;
+      background: #2a82fe;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .action-btn:hover {
+      background: #1e71e2;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app-container">
+    <!-- 頂部工具列 -->
+    <header id="top-toolbar">
+      <div class="toolbar-group">
+        <span class="gallery-text">Gallery</span>
+        <svg class="tool-icon" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <svg class="tool-icon" viewBox="0 0 24 24"><path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z"/><path d="m5 2 5 5"/><path d="M2 5l5 5"/></svg>
+        <svg class="tool-icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg class="tool-icon" viewBox="0 0 24 24"><polygon points="3 3 10.07 19.97 12.58 12.58 19.97 10.07 3 3"/></svg>
+      </div>
+
+      <div class="toolbar-group-right">
+        <svg class="tool-icon active" viewBox="0 0 24 24"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18"/></svg>
+        <svg class="tool-icon" viewBox="0 0 24 24"><path d="M8 13v-8a2 2 0 0 1 4 0v6"/><path d="M12 9.5a2 2 0 0 1 4 0v4.5"/><path d="M5 14v-2a2 2 0 0 1 4 0v4"/><path d="M4 14a4 4 0 0 0 4 4h4a6 6 0 0 0 6-6V9a2 2 0 0 0-4 0"/></svg>
+        <svg class="tool-icon" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/></svg>
+        
+        <!-- Fitts' Law Target: Layers (無文字) -->
+        <div id="layers-target-wrapper">
+          <div id="layers-hitbox" class="target-size-40" title="Layers Target">
+            <svg id="layers-icon-svg" class="tool-icon" viewBox="0 0 24 24">
+              <polygon points="12 2 2 7 12 12 22 7 12 2" />
+              <polyline points="2 12 12 17 22 12" />
+              <polyline points="2 17 12 22 22 17" />
+            </svg>
+          </div>
+        </div>
+
+        <div class="color-disc"></div>
+      </div>
+    </header>
+
+    <!-- 左側側邊欄 -->
+    <aside id="left-dock">
+      <div class="slider-track"><div class="slider-thumb"></div></div>
+      <div class="dock-btn">◻</div>
+      <div class="slider-track"><div class="slider-thumb"></div></div>
+      <div class="dock-btn">↩</div>
+      <div class="dock-btn">↪</div>
+    </aside>
+
+    <!-- 中央畫布 -->
+    <main id="canvas-container">
+      <div id="drawing-paper">
+        <div id="start-point"></div>
+      </div>
+    </main>
+
+    <!-- HUD 狀態欄 -->
+    <div id="experiment-hud">Trial 1 / 108</div>
+
+    <!-- 完成實驗 Modal -->
+    <div id="modal-completion" class="modal-backdrop">
+      <div class="modal-box">
+        <h2 class="modal-title">Experiment Complete</h2>
+        <p class="modal-desc">
+          108 / 108<br>
+          108 trials completed.<br>
+          點擊下方按鈕下載 CSV 檔案。
+        </p>
+        <button class="action-btn" id="btn-download-csv">Download CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const TOTAL_TRIALS = 108;
+      const TOTAL_BLOCKS = 3;
+      const REPETITIONS_PER_BLOCK = 4;
+      const DISTANCES = [200, 400, 600];
+      const WIDTHS = [40, 60, 80];
+
+      let trialsPlan = [];
+      let currentTrialIndex = 0; // 0 至 107 對應 Trial 1 至 108
+      let currentExpectedTarget = 'START'; // 每一個 trial 都是由 'START' 開始，到 'LAYERS' 結束
+      let isInitialized = false;
+
+      let movementStartTime = 0;
+      let activeActualDistance = 0;
+      const experimentData = [];
+
+      const startPointEl = document.getElementById('start-point');
+      const layersHitboxEl = document.getElementById('layers-hitbox');
+      const drawingPaperEl = document.getElementById('drawing-paper');
+      const hudEl = document.getElementById('experiment-hud');
+      const modalCompletion = document.getElementById('modal-completion');
+      const btnDownloadCsv = document.getElementById('btn-download-csv');
+
+      function shuffleArray(array) {
+        const arr = [...array];
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      // 建立 3 個 Blocks，每個 Block 重新 Shuffle 9 個 conditions，每個 condition 重複 4 次 (共 108 trials)
+      function buildExperimentPlan() {
+        const baseConditions = [];
+        DISTANCES.forEach(distance => {
+          WIDTHS.forEach(width => {
+            baseConditions.push({ distance, width });
+          });
+        });
+
+        const fullPlan = [];
+
+        for (let b = 0; b < TOTAL_BLOCKS; b++) {
+          // 每個 block 獨立重新隨機排列 9 個 conditions
+          const randomizedConditions = shuffleArray(baseConditions);
+          
+          randomizedConditions.forEach(cond => {
+            for (let r = 0; r < REPETITIONS_PER_BLOCK; r++) {
+              fullPlan.push({
+                block: b + 1,
+                distance: cond.distance,
+                width: cond.width
+              });
+            }
+          });
+        }
+
+        return fullPlan;
+      }
+
+      // 幾何計算：在 Canvas 可視範圍內搜尋與 Layers target 中心剛好為 distanceA 的位置 (絕不使用 clamp)
+      function findAccurateStartPointPosition(targetCenter, distanceA) {
+        const paperRect = drawingPaperEl.getBoundingClientRect();
+        const r = 32; // Start Point 半徑 (64px / 2)
+        const margin = 12;
+
+        const minX = paperRect.left + r + margin;
+        const maxX = paperRect.right - r - margin;
+        const minY = paperRect.top + r + margin;
+        const maxY = paperRect.bottom - r - margin;
+
+        const validCandidates = [];
+
+        // 進行 360 度掃描 (步長 0.25 度)
+        for (let deg = 0; deg < 360; deg += 0.25) {
+          const rad = deg * (Math.PI / 180);
+          const cx = targetCenter.x + distanceA * Math.cos(rad);
+          const cy = targetCenter.y + distanceA * Math.sin(rad);
+
+          // 嚴格確保在畫布邊界內且 Y > 64px 避免與 Toolbar 重疊
+          if (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY && cy > 64) {
+            validCandidates.push({ clientX: cx, clientY: cy });
+          }
+        }
+
+        let chosen;
+        if (validCandidates.length > 0) {
+          // 優先挑選手寫操作最自然之左下方象限
+          const lowerLeft = validCandidates.filter(p => p.clientX <= targetCenter.x && p.clientY >= targetCenter.y);
+          if (lowerLeft.length > 0) {
+            chosen = lowerLeft[Math.floor(Math.random() * lowerLeft.length)];
+          } else {
+            chosen = validCandidates[Math.floor(Math.random() * validCandidates.length)];
+          }
+        } else {
+          // 極限搜尋步長
+          for (let deg = 90; deg <= 180; deg += 0.5) {
+            const rad = deg * (Math.PI / 180);
+            const cx = targetCenter.x - distanceA * Math.sin(rad - Math.PI / 2);
+            const cy = targetCenter.y + distanceA * Math.cos(rad - Math.PI / 2);
+            if (cx >= paperRect.left + r && cx <= paperRect.right - r && cy >= paperRect.top + r && cy <= paperRect.bottom - r) {
+              chosen = { clientX: cx, clientY: cy };
+              break;
+            }
+          }
+        }
+
+        const actualDistance = Math.hypot(chosen.clientX - targetCenter.x, chosen.clientY - targetCenter.y);
+
+        return {
+          left: chosen.clientX - paperRect.left,
+          top: chosen.clientY - paperRect.top,
+          actualDistance: actualDistance
+        };
+      }
+
+      // 配置當前 Target / Start Point 狀態
+      // isConditionChange: 僅在切換 condition (或螢幕旋轉/初始化) 時才設為 true 來重新定位 Start Point
+      function updateTargetStates(isConditionChange = false) {
+        if (currentTrialIndex >= TOTAL_TRIALS) {
+          showCompletionModal();
+          return;
+        }
+
+        const currentTrial = trialsPlan[currentTrialIndex];
+
+        // 1. 套用 Target 尺寸 (40 / 60 / 80)
+        layersHitboxEl.className = `target-size-${currentTrial.width}`;
+
+        // 2. 只有在進入新 condition（每 4 次 trial 一次）或初始化時，才重新計算並定位 Start Point
+        if (isConditionChange || !isInitialized) {
+          void layersHitboxEl.offsetWidth;
+          const targetRect = layersHitboxEl.getBoundingClientRect();
+          const targetCenter = {
+            x: targetRect.left + targetRect.width / 2,
+            y: targetRect.top + targetRect.height / 2
+          };
+
+          const pos = findAccurateStartPointPosition(targetCenter, currentTrial.distance);
+          activeActualDistance = pos.actualDistance;
+          startPointEl.style.left = `${pos.left}px`;
+          startPointEl.style.top = `${pos.top}px`;
+          isInitialized = true;
+        }
+
+        // 3. 視覺切換：根據下一個要點擊的目標加上高亮樣式
+        if (currentExpectedTarget === 'START') {
+          startPointEl.className = 'target-active';
+          layersHitboxEl.classList.remove('target-active');
+        } else {
+          startPointEl.className = 'target-inactive';
+          layersHitboxEl.classList.add('target-active');
+        }
+
+        // 4. 更新 HUD 顯示 (Trial 1 / 108 ... Trial 108 / 108)
+        hudEl.innerText = `Trial ${currentTrialIndex + 1} / ${TOTAL_TRIALS}`;
+      }
+
+      // 點擊 Start Point：啟動當前 trial 的單向計時 (不改變 Start Point 位置)
+      startPointEl.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+
+        if (currentExpectedTarget === 'START') {
+          movementStartTime = performance.now();
+          currentExpectedTarget = 'LAYERS'; // 目標轉移至 Layers
+          updateTargetStates(false);
+        }
+      });
+
+      // 點擊 Layers Target：完成單向 movement (Start -> Layers)，計算 MT 並儲存資料
+      layersHitboxEl.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+
+        if (currentExpectedTarget === 'LAYERS') {
+          const clickTime = performance.now();
+          const movementTime = clickTime - movementStartTime;
+
+          recordCurrentTrial(movementTime);
+
+          currentTrialIndex++;
+          if (currentTrialIndex >= TOTAL_TRIALS) {
+            showCompletionModal();
+            return;
+          }
+
+          // 重設為下一個 trial 的 Start 狀態 (維持 Start -> Layers 方向)
+          currentExpectedTarget = 'START';
+
+          // 判斷是否做完 4 次需換到下一個 condition
+          const isNextCondition = (currentTrialIndex % REPETITIONS_PER_BLOCK === 0);
+          updateTargetStates(isNextCondition);
+        }
+      });
+
+      // 記錄單一 Trial 數據 (嚴格保留欄位與對應 condition)
+      function recordCurrentTrial(mt) {
+        const trialInfo = trialsPlan[currentTrialIndex];
+        const dist = activeActualDistance;
+        const width = trialInfo.width;
+        const id = Math.log2((dist / width) + 1);
+
+        experimentData.push({
+          Trial: currentTrialIndex + 1,
+          Distance: dist.toFixed(2),
+          Width: width,
+          ID: id.toFixed(3),
+          MT: mt.toFixed(2)
+        });
+      }
+
+      function showCompletionModal() {
+        startPointEl.className = 'target-inactive';
+        layersHitboxEl.classList.remove('target-active');
+        hudEl.innerText = `${TOTAL_TRIALS} / ${TOTAL_TRIALS}`;
+        modalCompletion.style.display = 'flex';
+      }
+
+      function exportToCSV() {
+        if (experimentData.length === 0) return;
+
+        const header = 'Trial,Distance,Width,Index of Difficulty,MT';
+        const rows = [header];
+
+        experimentData.forEach(row => {
+          rows.push(`${row.Trial},${row.Distance},${row.Width},${row.ID},${row.MT}`);
+        });
+
+        const csvContent = rows.join('\r\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `FittsLaw_PartII_108Trials_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      btnDownloadCsv.addEventListener('click', exportToCSV);
+
+      window.addEventListener('resize', () => {
+        if (currentTrialIndex < TOTAL_TRIALS) {
+          updateTargetStates(true); // 視窗縮放時重新調整貼齊
+        }
+      });
+
+      window.addEventListener('DOMContentLoaded', () => {
+        trialsPlan = buildExperimentPlan();
+        currentTrialIndex = 0;
+        currentExpectedTarget = 'START';
+        isInitialized = false;
+        setTimeout(() => updateTargetStates(true), 60);
+      });
+    })();
+  </script>
+</body>
+</html>
